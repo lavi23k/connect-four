@@ -1,68 +1,42 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { Slot } from "./Slot";
+
+const socket = io('http://localhost:3001');
 
 export const Board = () => {
     const [board, setBoard] = useState(Array(6).fill(null).map(() => Array(7).fill('')));
     const [currPlayer, setCurrPlayer] = useState('R');
     const [gameOver, setGameOver] = useState(false);
+    const [myColor, setMyColor] = useState(null);
     const [currColumns, setCurrColumns] = useState([5, 5, 5, 5, 5, 5, 5]);
 
-    const setPiece = (col) => {
-        if (gameOver) return;
+    useEffect(() => {
+        socket.on('colorAssignment', (color) => {
+            setMyColor(color);
+        });
 
-        let row = currColumns[col];
-        if (row < 0) return;
+        socket.on('gameState', (gameState) => {
+            setBoard(gameState.board);
+            setCurrPlayer(gameState.currPlayer);
+            setGameOver(gameState.gameOver);
+            setCurrColumns(gameState.currColumns);
+        });
 
-        const newBoard = [...board];
-        newBoard[row][col] = currPlayer;
-
-        const newColumns = [...currColumns];
-        newColumns[col] = row - 1;
-
-        setBoard(newBoard);
-        setCurrColumns(newColumns);
-
-        if (checkWinner(newBoard, row, col, currPlayer)) {
+        socket.on('gameOver', (winner) => {
             setGameOver(true);
-            return;
-        }
+        });
 
-        setCurrPlayer(currPlayer === 'R' ? 'Y' : 'R');
-    };
+        return () => {
+            socket.off('colorAssignment');
+            socket.off('gameState');
+            socket.off('gameOver');
+        };
+    }, []);
 
-    const checkWinner = (board, row, col, player) => {
-        let count = 0;
-
-        for (let c = 0; c < 7; c++) {
-            count = board[row][c] === player ? count + 1 : 0;
-            if (count === 4) return true;
-        }
-
-        count = 0;
-        for (let r = 0; r < 6; r++) {
-            count = board[r][col] === player ? count + 1 : 0;
-            if (count === 4) return true;
-        }
-
-        count = 0;
-        let r = row, c = col;
-        while (r > 0 && c > 0) { r--; c--; }
-        while (r < 6 && c < 7) {
-            count = board[r][c] === player ? count + 1 : 0;
-            if (count === 4) return true;
-            r++; c++;
-        }
-
-        count = 0;
-        r = row; c = col;
-        while (r > 0 && c < 6) { r--; c++; }
-        while (r < 6 && c >= 0) {
-            count = board[r][c] === player ? count + 1 : 0;
-            if (count === 4) return true;
-            r++; c--;
-        }
-
-        return false;
+    const setPiece = (col) => {
+        if (gameOver || currPlayer !== myColor) return;
+        socket.emit('move', col);
     };
 
     return (
